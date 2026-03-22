@@ -6,6 +6,7 @@
 <title>Relojify</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root {
   --bg:        #07080c;
@@ -898,20 +899,29 @@ header{
           </div>
         </div>
         <div class="backup-divider"></div>
-        <div class="backup-item" onclick="driveSync()">
+        <div class="backup-item" onclick="drivePush()">
           <div class="backup-item-icon drive">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6.28 3L1 12.5l3.5 6L9.78 9zM22.5 18.5L19 12.5 13.72 3H8.22l8.5 14.5zM15.5 18.5H4.5l-1.75 3h18.5z"/></svg>
           </div>
           <div>
-            <div class="backup-item-label">Sincronizar con Drive</div>
-            <div class="backup-item-sub" id="driveStatusText">No conectado</div>
+            <div class="backup-item-label">Subir a Drive ↑</div>
+            <div class="backup-item-sub">Guardar colección local en Drive</div>
+          </div>
+        </div>
+        <div class="backup-item" onclick="drivePull()">
+          <div class="backup-item-icon drive">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6.28 3L1 12.5l3.5 6L9.78 9zM22.5 18.5L19 12.5 13.72 3H8.22l8.5 14.5zM15.5 18.5H4.5l-1.75 3h18.5z"/></svg>
+          </div>
+          <div>
+            <div class="backup-item-label">Descargar de Drive ↓</div>
+            <div class="backup-item-sub">Cargar colección desde Drive</div>
           </div>
         </div>
         <div class="backup-item" onclick="openDriveConfig()">
           <div class="backup-item-icon drive" style="font-size:14px">⚙</div>
           <div>
             <div class="backup-item-label">Configurar Google Drive</div>
-            <div class="backup-item-sub">API key y conexión</div>
+            <div class="backup-item-sub" id="driveStatusText">No conectado</div>
           </div>
         </div>
         <div class="drive-status">
@@ -2539,11 +2549,9 @@ function updateDriveStatusUI(){
   const label=document.getElementById('driveStatusLabel');
   const subtext=document.getElementById('driveStatusText');
   const disconnectBtn=document.getElementById('driveDisconnectBtn');
-  if(dot){
-    dot.className='drive-status-dot'+(connected?' connected':'');
-  }
+  if(dot) dot.className='drive-status-dot'+(connected?' connected':'');
   if(label) label.textContent=connected?'Google Drive conectado':'Google Drive no configurado';
-  if(subtext) subtext.textContent=connected?'Listo para sincronizar':'No conectado';
+  if(subtext) subtext.textContent=connected?'Conectado':'No conectado';
   if(disconnectBtn) disconnectBtn.style.display=connected?'block':'none';
 }
 
@@ -2569,8 +2577,10 @@ function saveDriveConfig(){
   document.getElementById('driveModalStatus').textContent='⏳ Conectando con Google…';
   driveToken=null;
   driveAuthenticate(()=>{
-    document.getElementById('driveModalStatus').textContent='✅ Conectado correctamente. Ya puedes sincronizar.';
+    document.getElementById('driveModalStatus').textContent='✅ Conectado. Descargando colección de Drive…';
     updateDriveStatusUI();
+    // Tras conectar, intentar descargar automáticamente
+    autoLoadFromDrive();
   }, err=>{
     document.getElementById('driveModalStatus').textContent='❌ Error: '+err;
   });
@@ -2580,6 +2590,7 @@ function disconnectDrive(){
   driveToken=null;
   driveFileId=null;
   localStorage.removeItem('relojify_drive_fileid');
+  localStorage.removeItem('relojify_drive_clientid');
   updateDriveStatusUI();
   document.getElementById('driveDisconnectBtn').style.display='none';
   document.getElementById('driveModalStatus').textContent='Desconectado de Google Drive.';
@@ -2590,10 +2601,7 @@ function driveAuthenticate(onSuccess, onError){
   const clientId=getDriveClientId();
   if(!clientId){ onError('Client ID no configurado'); return; }
 
-  // Usar Google Identity Services (popup OAuth2)
-  const gisScript=document.createElement('script');
-  gisScript.src='https://accounts.google.com/gsi/client';
-  gisScript.onload=()=>{
+  const tryAuth=()=>{
     try{
       const tokenClient=google.accounts.oauth2.initTokenClient({
         client_id: clientId,
@@ -2607,125 +2615,222 @@ function driveAuthenticate(onSuccess, onError){
       tokenClient.requestAccessToken({prompt:'consent'});
     }catch(e){ onError(e.message); }
   };
-  gisScript.onerror=()=>onError('No se pudo cargar Google Identity Services. Necesitas conexión a internet.');
-  document.head.appendChild(gisScript);
+
+  if(typeof google!=='undefined'&&google.accounts){
+    tryAuth();
+  } else {
+    let attempts=0;
+    const interval=setInterval(()=>{
+      attempts++;
+      if(typeof google!=='undefined'&&google.accounts){
+        clearInterval(interval); tryAuth();
+      } else if(attempts>25){
+        clearInterval(interval);
+        onError('No se pudo cargar Google Identity Services. Comprueba tu conexión.');
+      }
+    },200);
+  }
 }
 
-async function driveSync(){
-  closeBackupMenu();
-  if(!getDriveClientId()){
-    openDriveConfig();
-    showToast('Primero configura Google Drive','⚠️');
-    return;
+// ── AUTO-CARGA al arrancar ──────────────────────────────────
+async function autoLoadFromDrive(){
+  if(!getDriveClientId()) return; // Drive no configurado
+  if(!driveToken){
+    // Autenticar silenciosamente (sin prompt si ya autorizó antes)
+    try{
+      await new Promise((resolve,reject)=>{
+        const tryAuth=()=>{
+          try{
+            const tokenClient=google.accounts.oauth2.initTokenClient({
+              client_id: getDriveClientId(),
+              scope: DRIVE_SCOPE,
+              prompt:'', // sin popup si ya tiene sesión
+              callback:(resp)=>{
+                if(resp.error){ reject(resp.error); return; }
+                driveToken=resp.access_token;
+                resolve();
+              }
+            });
+            tokenClient.requestAccessToken({prompt:''});
+          }catch(e){ reject(e.message); }
+        };
+        if(typeof google!=='undefined'&&google.accounts){ tryAuth(); }
+        else {
+          let a=0;
+          const iv=setInterval(()=>{
+            a++;
+            if(typeof google!=='undefined'&&google.accounts){ clearInterval(iv); tryAuth(); }
+            else if(a>25){ clearInterval(iv); reject('GIS no disponible'); }
+          },200);
+        }
+      });
+    }catch(e){
+      // Si falla autenticación silenciosa, no mostrar error — el usuario puede conectar manualmente
+      console.log('Auto-auth Drive silenciosa falló:',e);
+      return;
+    }
   }
+  // Intentar descargar
+  try{
+    const data=await fetchFromDrive();
+    if(!data) return; // no hay archivo en Drive todavía
+    const remoteWatches=Array.isArray(data)?data:(data.watches||[]);
+    if(remoteWatches.length===0) return;
+    // Si local está vacío, cargar sin preguntar
+    if(watches.length===0){
+      await importFromDriveData(remoteWatches);
+      showToast(`☁️ ${remoteWatches.length} relojes cargados de Drive`,'☁️');
+      updateDriveStatusUI();
+      return;
+    }
+    // Si local tiene datos, preguntar
+    if(remoteWatches.length!==watches.length){
+      const remDateStr=data.exportDate?new Date(data.exportDate).toLocaleString('es-ES'):'—';
+      const download=confirm(
+        `Tu colección en Google Drive tiene ${remoteWatches.length} relojes (guardado: ${remDateStr}).\n` +
+        `Tu colección local tiene ${watches.length} relojes.\n\n` +
+        `¿Cargar la colección de Drive? (se reemplazará la local)\n\n` +
+        `[OK = Cargar Drive | Cancelar = Mantener local]`
+      );
+      if(download){
+        await importFromDriveData(remoteWatches);
+        showToast(`☁️ ${remoteWatches.length} relojes cargados de Drive`,'☁️');
+      }
+    }
+    updateDriveStatusUI();
+  }catch(e){
+    console.log('Auto-load Drive falló:',e);
+  }
+}
+
+// ── SUBIR a Drive ───────────────────────────────────────────
+async function drivePush(){
+  closeBackupMenu();
+  if(!getDriveClientId()){ openDriveConfig(); showToast('Primero configura Google Drive','⚠️'); return; }
   if(!driveToken){
     showToast('Conectando con Google…','⏳');
-    driveAuthenticate(()=>{ doSync(); }, err=>showToast('Error autenticando: '+err,'❌'));
+    driveAuthenticate(()=>doPush(), err=>showToast('Error: '+err,'❌'));
     return;
   }
-  doSync();
+  doPush();
 }
 
-async function doSync(){
-  // Actualizar dot a "syncing"
-  const dot=document.getElementById('driveStatusDot');
-  if(dot) dot.className='drive-status-dot syncing';
-  document.getElementById('driveStatusLabel').textContent='Sincronizando…';
-  showToast('Sincronizando con Google Drive…','⏳');
-
+async function doPush(){
+  setDriveSyncing(true);
   try{
-    // 1) Buscar archivo existente si no tenemos fileId
-    if(!driveFileId){
-      const searchRes=await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_FILE_NAME}'+and+trashed=false&fields=files(id,name,modifiedTime)`,
-        {headers:{Authorization:`Bearer ${driveToken}`}}
-      );
-      if(!searchRes.ok) throw new Error('Error buscando archivo en Drive');
-      const searchData=await searchRes.json();
-      if(searchData.files&&searchData.files.length>0){
-        driveFileId=searchData.files[0].id;
-        localStorage.setItem('relojify_drive_fileid',driveFileId);
-      }
-    }
-
-    // 2) Si existe archivo remoto, comparar con local y preguntar
-    if(driveFileId){
-      const remoteRes=await fetch(
-        `https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`,
-        {headers:{Authorization:`Bearer ${driveToken}`}}
-      );
-      if(remoteRes.ok){
-        const remoteData=await remoteRes.json();
-        const remoteWatches=Array.isArray(remoteData)?remoteData:(remoteData.watches||[]);
-        const localCount=watches.length;
-        const remoteCount=remoteWatches.length;
-
-        // Si hay diferencias, preguntar qué hacer
-        if(remoteCount!==localCount||JSON.stringify(remoteWatches.map(w=>w.id).sort())!==JSON.stringify(watches.map(w=>w.id).sort())){
-          const choice=await showSyncDialog(localCount,remoteCount,remoteData.exportDate);
-          if(choice==='cancel'){ resetDriveStatus(); return; }
-          if(choice==='download'){
-            await importFromDriveData(remoteWatches);
-            showToast(`✅ ${remoteCount} relojes descargados de Drive`,'☁️');
-            resetDriveStatus(true); return;
-          }
-          // choice === 'upload' → sube local
-        }
-      }
-    }
-
-    // 3) Subir datos locales a Drive
     await uploadToDrive();
-    showToast(`✅ Colección sincronizada — ${watches.length} relojes`,'☁️');
-
+    showToast(`✅ Colección subida a Drive — ${watches.length} relojes`,'☁️');
   }catch(err){
-    console.error(err);
-    if(err.message&&err.message.includes('401')){
-      driveToken=null;
-      showToast('Sesión expirada. Vuelve a conectar desde Configurar Drive.','⚠️');
-    } else {
-      showToast('Error sincronizando: '+err.message,'❌');
-    }
+    handleDriveError(err);
   }
-  resetDriveStatus(true);
+  setDriveSyncing(false);
 }
 
-function resetDriveStatus(connected=false){
+// ── DESCARGAR de Drive ──────────────────────────────────────
+async function drivePull(){
+  closeBackupMenu();
+  if(!getDriveClientId()){ openDriveConfig(); showToast('Primero configura Google Drive','⚠️'); return; }
+  if(!driveToken){
+    showToast('Conectando con Google…','⏳');
+    driveAuthenticate(()=>doPull(), err=>showToast('Error: '+err,'❌'));
+    return;
+  }
+  doPull();
+}
+
+async function doPull(){
+  setDriveSyncing(true);
+  try{
+    const data=await fetchFromDrive();
+    if(!data){ showToast('No hay colección guardada en Drive todavía','⚠️'); setDriveSyncing(false); return; }
+    const remoteWatches=Array.isArray(data)?data:(data.watches||[]);
+    if(remoteWatches.length===0){ showToast('El archivo de Drive está vacío','⚠️'); setDriveSyncing(false); return; }
+    const remDateStr=data.exportDate?new Date(data.exportDate).toLocaleString('es-ES'):'—';
+    const ok=confirm(
+      `Se descargará la colección de Drive:\n\n` +
+      `☁️ ${remoteWatches.length} relojes (guardado: ${remDateStr})\n\n` +
+      `Esto reemplazará tu colección local (${watches.length} relojes).\n¿Continuar?`
+    );
+    if(ok){
+      await importFromDriveData(remoteWatches);
+      showToast(`✅ ${remoteWatches.length} relojes descargados de Drive`,'☁️');
+    }
+  }catch(err){
+    handleDriveError(err);
+  }
+  setDriveSyncing(false);
+}
+
+// ── HELPERS ─────────────────────────────────────────────────
+function setDriveSyncing(on){
   const dot=document.getElementById('driveStatusDot');
   const label=document.getElementById('driveStatusLabel');
-  if(dot) dot.className='drive-status-dot'+(connected?' connected':'');
-  if(label) label.textContent=connected?'Google Drive conectado':'Google Drive no configurado';
+  if(on){
+    if(dot) dot.className='drive-status-dot syncing';
+    if(label) label.textContent='Sincronizando…';
+  } else {
+    updateDriveStatusUI();
+  }
+}
+
+function handleDriveError(err){
+  console.error(err);
+  if(err.message&&(err.message.includes('401')||err.message.includes('403'))){
+    driveToken=null;
+    showToast('Sesión expirada. Vuelve a conectar desde Configurar Drive.','⚠️');
+  } else {
+    showToast('Error Drive: '+(err.message||err),'❌');
+  }
+}
+
+async function fetchFromDrive(){
+  // Buscar archivo si no tenemos fileId
+  if(!driveFileId){
+    const searchRes=await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_FILE_NAME}'+and+trashed=false&fields=files(id,name,modifiedTime)`,
+      {headers:{Authorization:`Bearer ${driveToken}`}}
+    );
+    if(!searchRes.ok) throw new Error('Error buscando en Drive: '+searchRes.status);
+    const searchData=await searchRes.json();
+    if(searchData.files&&searchData.files.length>0){
+      driveFileId=searchData.files[0].id;
+      localStorage.setItem('relojify_drive_fileid',driveFileId);
+    } else {
+      return null; // no existe todavía
+    }
+  }
+  const res=await fetch(
+    `https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`,
+    {headers:{Authorization:`Bearer ${driveToken}`}}
+  );
+  if(res.status===404){ driveFileId=null; localStorage.removeItem('relojify_drive_fileid'); return null; }
+  if(!res.ok) throw new Error('Error descargando de Drive: '+res.status);
+  return await res.json();
 }
 
 async function uploadToDrive(){
-  const data={
-    version:1,
-    exportDate:new Date().toISOString(),
-    total:watches.length,
-    watches
-  };
+  const data={version:1,exportDate:new Date().toISOString(),total:watches.length,watches};
   const json=JSON.stringify(data);
-  const blob=new Blob([json],{type:'application/json'});
 
   if(driveFileId){
-    // Actualizar archivo existente
-    await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`,{
+    const res=await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`,{
       method:'PATCH',
       headers:{Authorization:`Bearer ${driveToken}`,'Content-Type':'application/json'},
       body:json
     });
+    if(res.status===404){ driveFileId=null; localStorage.removeItem('relojify_drive_fileid'); await uploadToDrive(); return; }
+    if(!res.ok) throw new Error('Error subiendo a Drive: '+res.status);
   } else {
-    // Crear archivo nuevo con metadata
     const meta=JSON.stringify({name:DRIVE_FILE_NAME,mimeType:'application/json'});
     const form=new FormData();
     form.append('metadata',new Blob([meta],{type:'application/json'}));
-    form.append('file',blob);
+    form.append('file',new Blob([json],{type:'application/json'}));
     const res=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',{
       method:'POST',
       headers:{Authorization:`Bearer ${driveToken}`},
       body:form
     });
-    if(!res.ok) throw new Error('Error creando archivo en Drive');
+    if(!res.ok) throw new Error('Error creando archivo en Drive: '+res.status);
     const created=await res.json();
     driveFileId=created.id;
     localStorage.setItem('relojify_drive_fileid',driveFileId);
@@ -2733,34 +2838,21 @@ async function uploadToDrive(){
 }
 
 async function importFromDriveData(remoteWatches){
+  // Limpiar BD local y cargar datos de Drive
   for(const w of remoteWatches) await dbPut(w);
+  // Eliminar relojes locales que no están en Drive
+  const remoteIds=new Set(remoteWatches.map(w=>w.id));
+  for(const w of watches){
+    if(!remoteIds.has(w.id)) await dbDelete(w.id);
+  }
   watches=await dbGetAll();
   renderAll();
 }
 
-function showSyncDialog(localCount,remoteCount,remoteDate){
-  return new Promise(resolve=>{
-    const remDateStr=remoteDate?new Date(remoteDate).toLocaleString('es-ES'):'desconocida';
-    const msg=`Se encontraron diferencias entre tu colección local y la de Drive:\n\n` +
-      `📱 Local: ${localCount} relojes\n` +
-      `☁️ Drive: ${remoteCount} relojes (guardado: ${remDateStr})\n\n` +
-      `¿Qué quieres hacer?\n\n` +
-      `• OK → Subir tu colección local a Drive (sobreescribe Drive)\n` +
-      `• Cancelar → Descargar desde Drive (sobreescribe local)`;
-
-    // Usamos confirm: OK=subir, Cancel=preguntar de nuevo
-    const upload=confirm(msg+'\n\n[OK = Subir local → Drive | Cancelar = Descargar Drive → local]');
-    if(upload){
-      resolve('upload');
-    } else {
-      const download=confirm('¿Descargar la colección de Google Drive y reemplazar la local?');
-      resolve(download?'download':'cancel');
-    }
-  });
-}
-
-// Inicializar estado Drive al arrancar
+// Inicializar y auto-cargar al arrancar
 updateDriveStatusUI();
+// Esperar a que la BD esté lista antes de intentar auto-cargar
+setTimeout(()=>{ if(getDriveClientId()) autoLoadFromDrive(); }, 1500);
 </script>
 
 </body>
