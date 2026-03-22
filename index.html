@@ -1649,10 +1649,14 @@ async function saveWatch(){
 
     // 1) Comprobar si alguna foto ya existe en otro reloj de la colección
     if(currentPhotos.length>0){
-      // Usamos los primeros 200 chars del base64 como huella rápida de la imagen
-      const newFingerprints=currentPhotos.map(p=>p.slice(0,200));
+      // Usar huella más robusta: 100 chars del inicio + 100 del medio + 100 del final
+      const fingerprint=p=>{
+        const mid=Math.floor(p.length/2);
+        return p.slice(0,100)+p.slice(mid-50,mid+50)+p.slice(-100);
+      };
+      const newFingerprints=currentPhotos.map(fingerprint);
       const photoDup=watches.find(w=>
-        (w.photos||[]).some(p=>newFingerprints.includes(p.slice(0,200)))
+        (w.photos||[]).some(p=>newFingerprints.includes(fingerprint(p)))
       );
       if(photoDup){
         const label=photoDup.model?`${photoDup.brand} ${photoDup.model}`:photoDup.brand;
