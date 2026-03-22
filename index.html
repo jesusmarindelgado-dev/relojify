@@ -851,6 +851,25 @@ header{
 </head>
 <body>
 
+<!-- LOGIN SCREEN -->
+<div id="loginScreen" style="position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:40px 36px;width:340px;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,.6)">
+    <div style="font-size:40px;margin-bottom:16px">⌚</div>
+    <div style="font-family:'Playfair Display',serif;font-size:26px;color:var(--text);margin-bottom:4px">Relojify</div>
+    <div style="font-size:12px;color:var(--text3);letter-spacing:.15em;text-transform:uppercase;margin-bottom:32px">Colección Privada</div>
+    <input type="password" id="loginInput" placeholder="Contraseña"
+      style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:'Outfit',sans-serif;font-size:14px;padding:12px 16px;outline:none;text-align:center;letter-spacing:.15em;box-sizing:border-box;margin-bottom:12px"
+      onkeydown="if(event.key==='Enter')checkLogin()">
+    <button onclick="checkLogin()"
+      style="width:100%;padding:12px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#a070ff);border:none;color:#fff;font-family:'Outfit',sans-serif;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:10px">
+      Entrar
+    </button>
+    <div id="loginError" style="font-size:12px;color:var(--red);min-height:18px"></div>
+  </div>
+</div>
+
+<div id="appContent" style="display:none">
+
 <!-- HEADER -->
 <header>
   <div class="logo">
@@ -1137,27 +1156,146 @@ header{
 
         <div class="field">
           <label>Material caja</label>
-          <input type="text" id="f_casematerial" placeholder="Acero, Oro 18k...">
+          <input type="text" id="f_casematerial" placeholder="Acero inoxidable..." list="list_casematerial" autocomplete="off">
+          <datalist id="list_casematerial">
+            <option value="Acero inoxidable">
+            <option value="Acero inoxidable 316L">
+            <option value="Acero inoxidable 904L">
+            <option value="Oro amarillo 18k">
+            <option value="Oro blanco 18k">
+            <option value="Oro rosa 18k">
+            <option value="Oro amarillo 14k">
+            <option value="Oro blanco 14k">
+            <option value="Oro rosa 14k">
+            <option value="Titanio">
+            <option value="Titanio grado 5">
+            <option value="Platino">
+            <option value="Bronce">
+            <option value="Latón chapado en oro">
+            <option value="Carbono">
+            <option value="Cerámica">
+            <option value="Aluminio">
+            <option value="Plástico / Resina">
+          </datalist>
         </div>
         <div class="field">
           <label>Diámetro caja</label>
-          <input type="text" id="f_casesize" placeholder="40mm">
+          <input type="text" id="f_casesize" placeholder="40mm" list="list_casesize" autocomplete="off">
+          <datalist id="list_casesize">
+            <option value="28mm">
+            <option value="30mm">
+            <option value="32mm">
+            <option value="34mm">
+            <option value="36mm">
+            <option value="37mm">
+            <option value="38mm">
+            <option value="39mm">
+            <option value="40mm">
+            <option value="41mm">
+            <option value="42mm">
+            <option value="43mm">
+            <option value="44mm">
+            <option value="45mm">
+            <option value="46mm">
+            <option value="47mm">
+            <option value="48mm">
+            <option value="50mm">
+          </datalist>
         </div>
         <div class="field">
           <label>Agua</label>
-          <input type="text" id="f_waterresist" placeholder="300m, 30ATM...">
+          <input type="text" id="f_waterresist" placeholder="300m, 30ATM..." list="list_waterresist" autocomplete="off">
+          <datalist id="list_waterresist">
+            <option value="Sin resistencia al agua">
+            <option value="30m / 3ATM">
+            <option value="50m / 5ATM">
+            <option value="100m / 10ATM">
+            <option value="150m / 15ATM">
+            <option value="200m / 20ATM">
+            <option value="300m / 30ATM">
+            <option value="500m / 50ATM">
+            <option value="1000m / 100ATM">
+          </datalist>
         </div>
         <div class="field">
           <label>Cristal</label>
-          <input type="text" id="f_crystal" placeholder="Zafiro, Mineral...">
+          <input type="text" id="f_crystal" placeholder="Zafiro, Mineral..." list="list_crystal" autocomplete="off">
+          <datalist id="list_crystal">
+            <option value="Zafiro">
+            <option value="Zafiro antirreflejo">
+            <option value="Zafiro doble cara antirreflejo">
+            <option value="Zafiro con lupa (Cyclops)">
+            <option value="Mineral">
+            <option value="Mineral endurecido">
+            <option value="Plexiglás / Acrílico">
+            <option value="Hesalit">
+          </datalist>
         </div>
         <div class="field">
           <label>Color esfera</label>
-          <input type="text" id="f_dialcolor" placeholder="Negro, Azul...">
+          <input type="text" id="f_dialcolor" placeholder="Negro, Azul..." list="list_dialcolor" autocomplete="off">
+          <datalist id="list_dialcolor">
+            <option value="Negro">
+            <option value="Blanco">
+            <option value="Blanco crema">
+            <option value="Marfil">
+            <option value="Plateado">
+            <option value="Gris">
+            <option value="Antracita">
+            <option value="Azul">
+            <option value="Azul marino">
+            <option value="Azul dial">
+            <option value="Azul glaciar">
+            <option value="Verde">
+            <option value="Verde oliva">
+            <option value="Verde bosque">
+            <option value="Rojo">
+            <option value="Burdeos">
+            <option value="Naranja">
+            <option value="Amarillo">
+            <option value="Marrón">
+            <option value="Chocolate">
+            <option value="Cobre">
+            <option value="Rosa">
+            <option value="Morado">
+            <option value="Champán">
+            <option value="Dorado">
+            <option value="Madre perla">
+            <option value="Madre perla blanca">
+            <option value="Madre perla azul">
+            <option value="Skeleton (esqueleto)">
+          </datalist>
         </div>
         <div class="field">
           <label>Correa / Brazalete</label>
-          <input type="text" id="f_strap" placeholder="Acero Oyster, Cuero...">
+          <input type="text" id="f_strap" placeholder="Acero Oyster, Cuero..." list="list_strap" autocomplete="off">
+          <datalist id="list_strap">
+            <option value="Brazalete acero Oyster">
+            <option value="Brazalete acero Jubilee">
+            <option value="Brazalete acero President">
+            <option value="Brazalete acero Presidente">
+            <option value="Brazalete acero Milan">
+            <option value="Brazalete acero integrado">
+            <option value="Brazalete acero">
+            <option value="Brazalete titanio">
+            <option value="Brazalete oro amarillo 18k">
+            <option value="Brazalete oro blanco 18k">
+            <option value="Brazalete oro rosa 18k">
+            <option value="Correa cuero marrón">
+            <option value="Correa cuero negro">
+            <option value="Correa cuero burdeos">
+            <option value="Correa cuero azul">
+            <option value="Correa piel de cocodrilo">
+            <option value="Correa piel de lagarto">
+            <option value="Correa piel de avestruz">
+            <option value="Correa NATO nylon">
+            <option value="Correa nylon Perlon">
+            <option value="Correa caucho negro">
+            <option value="Correa caucho azul">
+            <option value="Correa silicona">
+            <option value="Correa tela">
+            <option value="Correa cuero perforado">
+          </datalist>
         </div>
       </div>
 
@@ -2860,3 +2998,41 @@ setTimeout(()=>{ if(getDriveClientId()) autoLoadFromDrive(); }, 1500);
 </script>
 
 </body>
+</div><!-- /appContent -->
+<script>
+// ── LOGIN ───────────────────────────────────────────────────
+(function(){
+  const CORRECT_HASH = '9e23715398ea65a64d3d7f5f4f48c895551773e9577197e08241acb87dd41843';
+  const SESSION_KEY = 'relojify_session';
+
+  window.checkLogin = async function(){
+    const val = document.getElementById('loginInput').value;
+    if(!val){ document.getElementById('loginError').textContent = 'Introduce la contraseña'; return; }
+
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(val));
+    const hash = [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
+
+    if(hash === CORRECT_HASH){
+      sessionStorage.setItem(SESSION_KEY, '1');
+      showApp();
+    } else {
+      document.getElementById('loginError').textContent = 'Contraseña incorrecta';
+      document.getElementById('loginInput').value = '';
+      document.getElementById('loginInput').focus();
+    }
+  };
+
+  function showApp(){
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appContent').style.display = 'block';
+  }
+
+  // Sesión activa mientras el navegador esté abierto
+  if(sessionStorage.getItem(SESSION_KEY) === '1'){
+    showApp();
+  }
+})();
+</script>
+
+</body>
+</html>
